@@ -95,9 +95,12 @@ def get_gemini_response(user_id, message):
         context = "\n".join(user_conversations[user_id][-10:])  # 最近5輪對話
         
         # 系統提示詞
-        system_prompt = """你是一個友善的AI助手，請用繁體中文回答問題。
-請保持回答簡潔明瞭，適合在LINE聊天中使用。
-如果用戶問候你，請友善地回應。"""
+        system_prompt = """你是一個專業的AI助手，擅長提供簡短且有用的回答。 請用繁體中文回應，並遵循以下原則：
+記住對話脈絡，提供連貫的服務
+提供重點條列式且結構化的回答
+會主動詢問澄清問題以提供更精確的幫助
+適時提供額外的相關知識和資源
+如果不確定答案，會誠實說明並提供可能的方向適合在LINE聊天中閱讀，但內容要有深度。"""
         
         # 生成回應
         full_prompt = f"{system_prompt}\n\n對話歷史:\n{context}\n\nAI:"
