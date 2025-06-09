@@ -20,15 +20,24 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # 檢查必要的環境變數
 if not all([LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, GEMINI_API_KEY]):
     logger.error("請設定所有必要的環境變數")
-    exit(1)
+    # 在部署環境中，如果環境變數未設定，我們先讓服務啟動，但會記錄錯誤
+    logger.error(f"LINE_CHANNEL_ACCESS_TOKEN: {'已設定' if LINE_CHANNEL_ACCESS_TOKEN else '未設定'}")
+    logger.error(f"LINE_CHANNEL_SECRET: {'已設定' if LINE_CHANNEL_SECRET else '未設定'}")
+    logger.error(f"GEMINI_API_KEY: {'已設定' if GEMINI_API_KEY else '未設定'}")
 
-# 初始化LINE Bot
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
+# 初始化LINE Bot（只有在環境變數存在時）
+line_bot_api = None
+handler = None
+model = None
 
-# 初始化Gemini
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+if LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET:
+    line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+    handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+# 初始化Gemini（只有在API key存在時）
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
 # 用戶對話歷史存儲（簡單的內存存儲）
 user_conversations = {}
@@ -36,6 +45,9 @@ user_conversations = {}
 def get_gemini_response(user_id, message):
     """獲取Gemini回應"""
     try:
+        if not model:
+            return "AI服務暫時無法使用，請稍後再試。"
+            
         # 獲取或創建用戶對話歷史
         if user_id not in user_conversations:
             user_conversations[user_id] = []
@@ -73,6 +85,9 @@ def get_gemini_response(user_id, message):
 @app.route("/callback", methods=['POST'])
 def callback():
     """LINE Webhook回調函數"""
+    if not handler:
+        abort(500)
+        
     signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
     
@@ -91,6 +106,10 @@ def callback():
 def handle_message(event):
     """處理文字訊息"""
     try:
+        if not line_bot_api:
+            logger.error("LINE Bot API 未初始化")
+            return
+            
         user_id = event.source.user_id
         user_message = event.message.text
         
@@ -121,7 +140,13 @@ def home():
 @app.route("/health", methods=['GET'])
 def health_check():
     """健康檢查"""
-    return {"status": "healthy", "service": "LINE Bot with Gemini"}
+    status = {
+        "status": "healthy",
+        "service": "LINE Bot with Gemini",
+        "line_bot_initialized": line_bot_api is not None,
+        "gemini_initialized": model is not None
+    }
+    return status
 
 if __name__ == "__main__":
     port = int(os.getenv('PORT', 5000))
