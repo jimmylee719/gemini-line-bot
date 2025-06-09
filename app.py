@@ -5,6 +5,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import logging
+import requests  # 新增：用於發送等待動畫API請求
 
 # 設定日誌
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +42,37 @@ if GEMINI_API_KEY:
 
 # 用戶對話歷史存儲（簡單的內存存儲）
 user_conversations = {}
+
+# 新增：顯示等待動畫的函數
+def show_loading_animation(user_id, loading_seconds=5):
+    """顯示LINE等待動畫"""
+    try:
+        if not LINE_CHANNEL_ACCESS_TOKEN:
+            logger.warning("無法顯示等待動畫：LINE Token未設定")
+            return False
+            
+        url = "https://api.line.me/v2/bot/chat/loading/start"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
+        }
+        data = {
+            "chatId": user_id,
+            "loadingSeconds": loading_seconds
+        }
+        
+        response = requests.post(url, json=data, headers=headers)
+        
+        if response.status_code == 202:
+            logger.info(f"等待動畫已開始顯示給用戶 {user_id}，持續 {loading_seconds} 秒")
+            return True
+        else:
+            logger.warning(f"等待動畫顯示失敗：{response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"顯示等待動畫時發生錯誤: {str(e)}")
+        return False
 
 def get_gemini_response(user_id, message):
     """獲取Gemini回應"""
@@ -115,7 +147,21 @@ def handle_message(event):
         
         logger.info(f"收到來自 {user_id} 的訊息: {user_message}")
         
-        # 獲取AI回應
+        # 新增：立即顯示等待動畫（根據訊息長度調整時間）
+        loading_seconds = 5  # 預設5秒
+        if len(user_message) > 50:
+            loading_seconds = 8  # 較長訊息用8秒
+        if len(user_message) > 100:
+            loading_seconds = 12  # 很長訊息用12秒
+            
+        # 包含複雜關鍵字的訊息延長等待時間
+        complex_keywords = ['分析', '解釋', '詳細', '比較', '計算', '翻譯', '寫作', '創作']
+        if any(keyword in user_message for keyword in complex_keywords):
+            loading_seconds = 15
+            
+        show_loading_animation(user_id, loading_seconds)
+        
+        # 獲取AI回應（原有邏輯不變）
         ai_response = get_gemini_response(user_id, user_message)
         
         # 回傳訊息給用戶
@@ -144,9 +190,34 @@ def health_check():
         "status": "healthy",
         "service": "LINE Bot with Gemini",
         "line_bot_initialized": line_bot_api is not None,
-        "gemini_initialized": model is not None
+        "gemini_initialized": model is not None,
+        "loading_animation_available": LINE_CHANNEL_ACCESS_TOKEN is not None  # 新增
     }
     return status
+
+# 新增：測試等待動畫的端點（可選）
+@app.route("/test-loading", methods=['POST'])
+def test_loading():
+    """測試等待動畫功能"""
+    try:
+        data = request.get_json()
+        user_id = data.get('userId')
+        seconds = data.get('seconds', 5)
+        
+        if not user_id:
+            return {"success": False, "error": "需要提供 userId"}, 400
+            
+        success = show_loading_animation(user_id, seconds)
+        
+        return {
+            "success": success,
+            "message": f"等待動畫已{'成功' if success else '失敗'}觸發",
+            "userId": user_id,
+            "seconds": seconds
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 500
 
 if __name__ == "__main__":
     port = int(os.getenv('PORT', 5000))
