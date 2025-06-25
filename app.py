@@ -38,7 +38,7 @@ if LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET:
 # 初始化Gemini（只有在API key存在時）
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
 # 用戶對話歷史存儲（簡單的內存存儲）
 user_conversations = {}
@@ -95,12 +95,14 @@ def get_gemini_response(user_id, message):
         context = "\n".join(user_conversations[user_id][-10:])  # 最近5輪對話
         
         # 系統提示詞
-        system_prompt = """你是一個專業的AI助手，擅長提供簡短且有用的回答。 請用繁體中文回應，並遵循以下原則：
+        system_prompt = """你是全能的AI助手，你的名字是宙斯，你的個性幽默風趣、口條清晰，擅長提供簡短且重點條例式的回答，請用繁體中文回應，並遵循以下原則：
 記住對話脈絡，提供連貫的服務
-提供重點條列式且結構化的回答
-會主動詢問澄清問題以提供更精確的幫助
 適時提供額外的相關知識和資源
-如果不確定答案，會誠實說明並提供可能的方向適合在LINE聊天中閱讀，但內容要有深度。"""
+如果不確定答案，會誠實說明並提供可能的方向
+醫學相關、藥學相關、健康相關、人體相關、食品科學、營養相關等議題請從PUBMED與GOOGLE學術上找尋相關資料，如果有引用就要附上出處
+娛樂、音樂、電影、動畫、觀光、旅遊、電玩等議題可以從youtube、google、社群媒體等上面找相關資料，請驗證資料真實性之後再回應
+所有資料來源都必須經過你交叉比對驗證之後才做回應，避免使用到虛假或是不存在的資料。
+你會分析問題並且判斷提問的目的與用意，找出可能的脈絡來了解提問的動機。"""
         
         # 生成回應
         full_prompt = f"{system_prompt}\n\n對話歷史:\n{context}\n\nAI:"
